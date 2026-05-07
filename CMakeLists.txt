@@ -9,8 +9,8 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools WebEngineWidgets WebChannel)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools WebEngineWidgets WebChannel)
 
 set(TS_FILES hospital_distribution_zh_CN.ts)
 
@@ -19,6 +19,9 @@ set(PROJECT_SOURCES
         mainwindow.cpp
         mainwindow.h
         mainwindow.ui
+        mapcontroller.cpp
+        mapcontroller.h
+        res.qrc
         ${TS_FILES}
 )
 
@@ -26,6 +29,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(hospital_distribution
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        mapcontroller.h mapcontroller.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET hospital_distribution APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -49,7 +53,11 @@ else()
     qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
-target_link_libraries(hospital_distribution PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(hospital_distribution PRIVATE
+  Qt${QT_VERSION_MAJOR}::Widgets
+  Qt${QT_VERSION_MAJOR}::WebEngineWidgets
+  Qt${QT_VERSION_MAJOR}::WebChannel
+)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

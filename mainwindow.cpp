@@ -6,6 +6,8 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    mapController = new MapController(ui->mapWidget, this);
+
 }
 
 MainWindow::~MainWindow()

@@ -2,13 +2,13 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include "mapcontroller.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
 class MainWindow;
 }
 QT_END_NAMESPACE
-
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -19,5 +19,6 @@ public:
 
 private:
     Ui::MainWindow *ui;
+    MapController *mapController;
 };
 #endif // MAINWINDOW_H
