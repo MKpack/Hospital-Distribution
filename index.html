@@ -3,38 +3,38 @@
 <head>
   <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  <title>Hello, World</title>
+  <title>医院区域划分 - 行政区边界 Voronoi</title>
   <style type="text/css">
-    html {
-      height: 100%
-    }
-    body {
-      height: 100%;
-      margin: 0px;
-      padding: 0px
-    }
-    #container {
-      height: 100%
-    }
+    html { height: 100% }
+    body { height: 100%; margin: 0; padding: 0 }
+    #container { height: 100% }
   </style>
-  <script type="text/javascript" src="https://api.map.baidu.com/api?v=1.0&type=webgl&ak=">
-  </script>
+  <script type="text/javascript" src="https://api.map.baidu.com/api?v=1.0&type=webgl&ak=II6rRBouSH5QcV9Rw4GmjZVjAAMPzn67"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js"></script>
 </head>
 <body>
   <div id="container"></div>
   <script type="text/javascript">
     var map = new BMapGL.Map("container");
     var point = new BMapGL.Point(116.404, 39.915);
-    map.centerAndZoom(point, 15);
+    map.centerAndZoom(point, 12);
     map.enableScrollWheelZoom(true);
 
     var hospitalMarkers = [];
     var hospitalLabels = [];
     var hospitalData = [];
+    var voronoiPolygons = [];
+    var currentRegion = "";
+
+    // 高德地图Key（用来获取行政区边界）
+    var amapKey = "f87d361117ac264f88e79982b9ad8d92";
 
     function clearMarkers() {
-      for (var i = 0; i < hospitalMarkers.length; i++) map.removeOverlay(hospitalMarkers[i]);
-      for (var i = 0; i < hospitalLabels.length; i++) map.removeOverlay(hospitalLabels[i]);
+      clearVoronoi();
+      for (var i = 0; i < hospitalMarkers.length; i++)
+        map.removeOverlay(hospitalMarkers[i]);
+      for (var i = 0; i < hospitalLabels.length; i++)
+        map.removeOverlay(hospitalLabels[i]);
       hospitalMarkers = [];
       hospitalLabels = [];
       hospitalData = [];
@@ -42,17 +42,18 @@
 
     function searchHospitals(region) {
       clearMarkers();
+      currentRegion = region;
 
       var local = new BMapGL.LocalSearch(map, {
         onSearchComplete: function (results) {
           if (local.getStatus() === BMAP_STATUS_SUCCESS) {
             var pois = [];
-            for (var i = 0; i < results.getCurrentNumPois(); i++) {
+            for (var i = 0; i < results.getCurrentNumPois(); i++)
               pois.push(results.getPoi(i));
-            }
-            if (pois.length > 0) {
-              map.setViewport(pois.map(function (p) { return p.point; }));
-            }
+
+            if (pois.length > 0)
+              map.setViewport(pois.map(p => p.point));
+
             for (var i = 0; i < pois.length; i++) {
               (function (poi) {
                 hospitalData.push({
@@ -78,12 +79,9 @@
                   offset: new BMapGL.Size(20, -10)
                 });
                 label.setStyle({
-                  color: "#333",
-                  fontSize: "12px",
-                  backgroundColor: "rgba(255,255,255,0.85)",
-                  border: "1px solid #999",
-                  padding: "2px 6px",
-                  whiteSpace: "nowrap"
+                  color: "#333", fontSize: "12px",
+                  backgroundColor: "rgba(255,255,255,0.9)",
+                  border: "1px solid #999", padding: "2px 6px"
                 });
                 map.addOverlay(label);
                 hospitalLabels.push(label);
@@ -94,6 +92,161 @@
       });
       local.search(region + " 医院");
     }
+
+    // 墨卡托投影（保证Voronoi不形变）
+    function mercatorForward(lng, lat) {
+      var x = lng * 20037508.34 / 180;
+      var latRad = lat * Math.PI / 180;
+      var y = Math.log(Math.tan(Math.PI / 4 + latRad / 2)) * 20037508.34 / Math.PI;
+      return [x, y];
+    }
+    function mercatorInverse(x, y) {
+      var lng = x * 180 / 20037508.34;
+      var lat = (2 * Math.atan(Math.exp(y * Math.PI / 20037508.34)) - Math.PI / 2) * 180 / Math.PI;
+      return { lng: lng, lat: lat };
+    }
+
+    // 高德GCJ-02 → 百度BD-09
+    function gcj02ToBd09(lng, lat) {
+      var xPi = Math.PI * 3000.0 / 180.0;
+      var z = Math.sqrt(lng * lng + lat * lat) + 0.00002 * Math.sin(lat * xPi);
+      var theta = Math.atan2(lat, lng) + 0.000003 * Math.cos(lng * xPi);
+      return {
+        lng: z * Math.cos(theta) + 0.0065,
+        lat: z * Math.sin(theta) + 0.006
+      };
+    }
+
+    function generateColors(count) {
+      var colors = [];
+      for (var i = 0; i < count; i++)
+        colors.push("hsl(" + (i * 360 / count) + ",70%,60%)");
+      return colors;
+    }
+
+    function clearVoronoi() {
+      voronoiPolygons.forEach(p => map.removeOverlay(p));
+      voronoiPolygons = [];
+    }
+
+    // ==============================================
+    // 核心：Sutherland-Hodgman 多边形裁剪算法
+    // ==============================================
+    function cross2d(a, b) { return a[0] * b[1] - a[1] * b[0]; }
+    function isInside(p, a, b) {
+      return cross2d([b[0] - a[0], b[1] - a[1]], [p[0] - a[0], p[1] - a[1]]) >= 0;
+    }
+    function lineIntersection(p1, p2, a, b) {
+      var d1x = p2[0] - p1[0], d1y = p2[1] - p1[1];
+      var d2x = b[0] - a[0], d2y = b[1] - a[1];
+      var cross = d1x * d2y - d1y * d2x;
+      if (Math.abs(cross) < 1e-12) return null;
+      var t = ((a[0] - p1[0]) * d2y - (a[1] - p1[1]) * d2x) / cross;
+      return [p1[0] + t * d1x, p1[1] + t * d1y];
+    }
+    function clipPolygon(subject, clip) {
+      if (!clip || clip.length < 3) return null;
+      var output = subject.slice();
+      for (var i = 0; i < clip.length; i++) {
+        if (output.length === 0) return [];
+        var input = output.slice(); output = [];
+        var s = clip[i], e = clip[(i + 1) % clip.length];
+        for (var j = 0; j < input.length; j++) {
+          var cur = input[j];
+          var pre = input[(j + input.length - 1) % input.length];
+          var cIn = isInside(cur, s, e);
+          var pIn = isInside(pre, s, e);
+          if (cIn) {
+            if (!pIn) output.push(lineIntersection(pre, cur, s, e));
+            output.push(cur);
+          } else if (pIn) {
+            output.push(lineIntersection(pre, cur, s, e));
+          }
+        }
+      }
+      return output.length >= 3 ? output : null;
+    }
+
+    // ==============================================
+    // 获取行政区边界（高德API）
+    // ==============================================
+    function getRegionBoundary(region) {
+      return new Promise(resolve => {
+        var url = "https://restapi.amap.com/v3/config/district"
+          + "?keywords=" + encodeURIComponent(region)
+          + "&subdistrict=0&extensions=all&key=" + amapKey;
+
+        fetch(url).then(r => r.json()).then(data => {
+          if (!data || data.status !== "1" || !data.districts?.length)
+            return resolve(null);
+          var line = data.districts[0].polyline;
+          if (!line) return resolve(null);
+          var pts = line.split(";")[0].split(";").map(p => {
+            var [lng, lat] = p.split(",").map(parseFloat);
+            var bd = gcj02ToBd09(lng, lat);
+            return [bd.lng, bd.lat];
+          });
+          resolve(pts.length >= 3 ? pts : null);
+        }).catch(() => resolve(null));
+      });
+    }
+
+    // ==============================================
+    // 核心：裁剪版 Voronoi
+    // ==============================================
+    function computeVoronoiClipped(boundaryLngLat) {
+      var points = hospitalData.map(h => [h.lng, h.lat]);
+      var mercPoints = points.map(p => mercatorForward(p[0], p[1]));
+      var mercBounds = boundaryLngLat?.map(p => mercatorForward(p[0], p[1])) || null;
+
+      var minX = Math.min(...mercPoints.map(p => p[0]));
+      var maxX = Math.max(...mercPoints.map(p => p[0]));
+      var minY = Math.min(...mercPoints.map(p => p[1]));
+      var maxY = Math.max(...mercPoints.map(p => p[1]));
+      var del = d3.Delaunay.from(mercPoints);
+      var vor = del.voronoi([minX - 1000, minY - 1000, maxX + 1000, maxY + 1000]);
+
+      var colors = generateColors(hospitalData.length);
+      for (var i = 0; i < hospitalData.length; i++) {
+        var cell = vor.cellPolygon(i);
+        if (!cell) continue;
+
+        if (mercBounds) cell = clipPolygon(cell, mercBounds);
+        if (!cell || cell.length < 3) continue;
+
+        var path = cell.map(c => {
+          var ll = mercatorInverse(c[0], c[1]);
+          return new BMapGL.Point(ll.lng, ll.lat);
+        });
+
+        var poly = new BMapGL.Polygon(path, {
+          strokeColor: colors[i], strokeWeight: 2,
+          fillColor: colors[i], fillOpacity: 0.18
+        });
+        map.addOverlay(poly);
+        voronoiPolygons.push(poly);
+      }
+    }
+
+    // ==============================================
+    // 运行分析（对外接口）
+    // ==============================================
+    async function runVoronoiAnalysis() {
+      if (hospitalData.length < 3)
+        return alert("至少需要3个医院");
+      clearVoronoi();
+      var bounds = currentRegion ? await getRegionBoundary(currentRegion) : null;
+      computeVoronoiClipped(bounds);
+      alert("✅ 行政区裁剪 Voronoi 生成完成！");
+    }
+
+    // ======================
+    // 测试调用（你直接用）
+    // ======================
+    setTimeout(() => {
+      searchHospitals("北京市朝阳区");
+      // 搜索完成后，在控制台输入 runVoronoiAnalysis() 即可生成！
+    }, 1000);
   </script>
 </body>
 </html>

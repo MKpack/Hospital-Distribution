@@ -23,3 +23,7 @@ void MapController::searchHosptial(const QString &region)
     m_view->page()->runJavaScript(js);
 }
 
+void MapController::runVoronoiAnalysis()
+{
+    m_view->page()->runJavaScript("runVoronoiAnalysis()");
+}

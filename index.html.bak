@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <title>Hello, World</title>
+  <style type="text/css">
+    html {
+      height: 100%
+    }
+    body {
+      height: 100%;
+      margin: 0px;
+      padding: 0px
+    }
+    #container {
+      height: 100%
+    }
+  </style>
+  <script type="text/javascript" src="https://api.map.baidu.com/api?v=1.0&type=webgl&ak=II6rRBouSH5QcV9Rw4GmjZVjAAMPzn67">
+  </script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/d3-delaunay@6/dist/d3-delaunay.min.js">
+  </script>
+</head>
+<body>
+  <div id="container"></div>
+  <script type="text/javascript">
+    var map = new BMapGL.Map("container");
+    var point = new BMapGL.Point(116.404, 39.915);
+    map.centerAndZoom(point, 15);
+    map.enableScrollWheelZoom(true);
+
+    var hospitalMarkers = [];
+    var hospitalLabels = [];
+    var hospitalData = [];
+    var voronoiPolygons = [];
+
+    function clearMarkers() {
+      clearVoronoi();
+      for (var i = 0; i < hospitalMarkers.length; i++) map.removeOverlay(hospitalMarkers[i]);
+      for (var i = 0; i < hospitalLabels.length; i++) map.removeOverlay(hospitalLabels[i]);
+      hospitalMarkers = [];
+      hospitalLabels = [];
+      hospitalData = [];
+    }
+
+    function searchHospitals(region) {
+      clearMarkers();
+
+      var local = new BMapGL.LocalSearch(map, {
+        onSearchComplete: function (results) {
+          if (local.getStatus() === BMAP_STATUS_SUCCESS) {
+            var pois = [];
+            for (var i = 0; i < results.getCurrentNumPois(); i++) {
+              pois.push(results.getPoi(i));
+            }
+            if (pois.length > 0) {
+              map.setViewport(pois.map(function (p) { return p.point; }));
+            }
+            for (var i = 0; i < pois.length; i++) {
+              (function (poi) {
+                hospitalData.push({
+                  name: poi.title,
+                  address: poi.address,
+                  lat: poi.point.lat,
+                  lng: poi.point.lng
+                });
+                var marker = new BMapGL.Marker(poi.point);
+                map.addOverlay(marker);
+                hospitalMarkers.push(marker);
+
+                marker.addEventListener("click", function () {
+                  var win = new BMapGL.InfoWindow(
+                    "<b>" + poi.title + "</b><br/>地址: " + (poi.address || "未知"),
+                    { width: 260, title: "医院详情" }
+                  );
+                  map.openInfoWindow(win, poi.point);
+                });
+
+                var label = new BMapGL.Label(poi.title, {
+                  position: poi.point,
+                  offset: new BMapGL.Size(20, -10)
+                });
+                label.setStyle({
+                  color: "#333",
+                  fontSize: "12px",
+                  backgroundColor: "rgba(255,255,255,0.85)",
+                  border: "1px solid #999",
+                  padding: "2px 6px",
+                  whiteSpace: "nowrap"
+                });
+                map.addOverlay(label);
+                hospitalLabels.push(label);
+              })(pois[i]);
+            }
+          }
+        }
+      });
+      local.search(region + " 医院");
+    }
+
+    function mercatorForward(lng, lat) {
+      var x = lng * 20037508.34 / 180.0;
+      var latRad = lat * Math.PI / 180.0;
+      var y = Math.log(Math.tan(Math.PI / 4.0 + latRad / 2.0)) * 20037508.34 / Math.PI;
+      return [x, y];
+    }
+
+    function mercatorInverse(x, y) {
+      var lng = x * 180.0 / 20037508.34;
+      var lat = (2.0 * Math.atan(Math.exp(y * Math.PI / 20037508.34)) - Math.PI / 2.0) * 180.0 / Math.PI;
+      return { lng: lng, lat: lat };
+    }
+
+    function generateColors(count) {
+      var colors = [];
+      for (var i = 0; i < count; i++) {
+        var hue = (i * 360.0 / count + 15) % 360;
+        colors.push("hsl(" + hue + ", 70%, 50%)");
+      }
+      return colors;
+    }
+
+    function clearVoronoi() {
+      for (var i = 0; i < voronoiPolygons.length; i++) {
+        map.removeOverlay(voronoiPolygons[i]);
+      }
+      voronoiPolygons = [];
+    }
+
+    function runVoronoiAnalysis() {
+      if (typeof d3 === "undefined" || typeof d3.Delaunay === "undefined") {
+        alert("Voronoi库加载失败，请检查网络连接");
+        return;
+      }
+
+      if (hospitalData.length < 3) {
+        alert("需要至少3个医院数据点才能进行Voronoi分析，当前仅有" + hospitalData.length + "个。请先搜索医院。");
+        return;
+      }
+
+      clearVoronoi();
+
+      var mercatorPoints = hospitalData.map(function (h) {
+        return mercatorForward(h.lng, h.lat);
+      });
+
+      var bounds = map.getBounds();
+      var sw = bounds.getSouthWest();
+      var ne = bounds.getNorthEast();
+      var swM = mercatorForward(sw.lng, sw.lat);
+      var neM = mercatorForward(ne.lng, ne.lat);
+      var marginX = (neM[0] - swM[0]) * 0.3;
+      var marginY = (neM[1] - swM[1]) * 0.3;
+      var clipBounds = [
+        swM[0] - marginX,
+        swM[1] - marginY,
+        neM[0] + marginX,
+        neM[1] + marginY
+      ];
+
+      var pointPairs = mercatorPoints.map(function (p) { return [p[0], p[1]]; });
+      var delaunay = d3.Delaunay.from(pointPairs);
+      var voronoi = delaunay.voronoi(clipBounds);
+
+      var colors = generateColors(hospitalData.length);
+
+      for (var i = 0; i < hospitalData.length; i++) {
+        var cell = voronoi.cellPolygon(i);
+        if (!cell || cell.length < 3) continue;
+
+        var path = [];
+        for (var j = 0; j < cell.length; j++) {
+          var ll = mercatorInverse(cell[j][0], cell[j][1]);
+          path.push(new BMapGL.Point(ll.lng, ll.lat));
+        }
+
+        var polygon = new BMapGL.Polygon(path, {
+          strokeColor: colors[i],
+          strokeWeight: 2,
+          strokeOpacity: 0.7,
+          fillColor: colors[i],
+          fillOpacity: 0.18
+        });
+
+        map.addOverlay(polygon);
+        voronoiPolygons.push(polygon);
+
+        (function (hospital, color) {
+          polygon.addEventListener("click", function () {
+            var win = new BMapGL.InfoWindow(
+              "<b>服务区: " + hospital.name + "</b><br/>地址: " + (hospital.address || "未知") +
+              "<br/><span style='color:" + color + "'>■</span> 该区域到此医院距离最近",
+              { width: 280, title: "Voronoi分析" }
+            );
+            map.openInfoWindow(win, new BMapGL.Point(hospital.lng, hospital.lat));
+          });
+        })(hospitalData[i], colors[i]);
+      }
+    }
+  </script>
+</body>
+</html>

@@ -16,6 +16,10 @@ MainWindow::MainWindow(QWidget *parent)
     });
 
     connect(ui->searchEdit, &QLineEdit::returnPressed, ui->searchBtn, &QPushButton::click);
+
+    connect(ui->voronoiBtn, &QPushButton::clicked, this, [this]() {
+        mapController->runVoronoiAnalysis();
+    });
 }
 
 MainWindow::~MainWindow()
