@@ -15,6 +15,13 @@ MapController::MapController(QWidget *container, QObject *parent)
     m_view->setUrl(QUrl("qrc:/index.html"));
 }
 
+void MapController::getScoreResult(std::function<void(const QString&)> callback)
+{
+    m_view->page()->runJavaScript("window.jsScoreResult", [callback](const QVariant& result) {
+        callback(result.toString());
+    });
+}
+
 void MapController::searchHosptial(const QString &region)
 {
     QString escaped = region;
@@ -26,4 +33,10 @@ void MapController::searchHosptial(const QString &region)
 void MapController::runVoronoiAnalysis()
 {
     m_view->page()->runJavaScript("runVoronoiAnalysis()");
+}
+
+// ===================== 新增：医院分布合理性计算 =====================
+void MapController::calculateRationality()
+{
+    m_view->page()->runJavaScript("calculateRationality()");
 }

@@ -10,10 +10,10 @@ class MapController : public QObject
     Q_OBJECT
 public:
     explicit MapController(QWidget *container,QObject *parent = nullptr);
-
+    void calculateRationality();
     void searchHosptial(const QString &region);
     void runVoronoiAnalysis();
-
+    void getScoreResult(std::function<void(const QString&)> callback);
 private:
     QWebEngineView *m_view;
 
