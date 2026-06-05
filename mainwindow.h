@@ -18,7 +18,10 @@ public:
     ~MainWindow();
 
 private:
+    // 由 Qt Designer 生成的界面对象，负责访问 .ui 中的控件。
     Ui::MainWindow *ui;
+
+    // 地图控制器封装 QWebEngineView 与网页 JavaScript 的交互逻辑。
     MapController *mapController;
 };
 #endif // MAINWINDOW_H
