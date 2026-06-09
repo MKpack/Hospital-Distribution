@@ -1,5 +1,6 @@
 #include "mapcontroller.h"
 #include <QLayout>
+#include <QStringList>
 #include <QUrl>
 #include <QWebEnginePage>
 
@@ -24,6 +25,38 @@ void MapController::getScoreResult(std::function<void(const QString&)> callback)
     m_view->page()->runJavaScript("window.jsScoreResult", [callback](const QVariant& result) {
         callback(result.toString());
     });
+}
+
+void MapController::calculateRationalityResult(std::function<void(const QString&)> callback)
+{
+    // 在同一次 JS 执行中完成“计算”和“读取结果”，避免异步调用顺序导致读到空值。
+    const QString js = "(function(){ return calculateRationality() || window.jsScoreResult || ''; })()";
+    m_view->page()->runJavaScript(js, [callback](const QVariant& result) {
+        callback(result.toString());
+    });
+}
+
+void MapController::getHospitalSearchState(std::function<void(bool, int)> callback)
+{
+    // 返回格式为 "是否完成|医院数量"，避免在 C++ 侧引入 JSON 解析依赖。
+    const QString js =
+        "String(window.hospitalSearchFinished ? 1 : 0) + '|' + "
+        "String((window.lastHospitalSearchInfo && window.lastHospitalSearchInfo.hospitalCount) || 0)";
+    m_view->page()->runJavaScript(js, [callback](const QVariant& result) {
+        const QStringList parts = result.toString().split('|');
+        const bool finished = parts.value(0) == "1";
+        const int hospitalCount = parts.value(1).toInt();
+        callback(finished, hospitalCount);
+    });
+}
+
+void MapController::loadRegionBoundary(const QString &region)
+{
+    // 将用户输入转义后拼接进 JS 字符串，触发网页端行政区边界查询。
+    QString escaped = region;
+    escaped.replace("\\", "\\\\").replace("'", "\\'");
+    QString js = QString("loadRegionBoundary('%1')").arg(escaped);
+    m_view->page()->runJavaScript(js);
 }
 
 void MapController::searchHosptial(const QString &region)

@@ -72,6 +72,112 @@
          </widget>
         </item>
         <item>
+         <widget class="QWidget" name="scorePanel" native="true">
+          <property name="minimumSize">
+           <size>
+            <width>150</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>180</width>
+            <height>16777215</height>
+           </size>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">QWidget#scorePanel {
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+}
+QLabel#scoreTitleLabel {
+  color: #333333;
+  font-weight: bold;
+}
+QLabel#scoreValueLabel {
+  color: #1f7a45;
+  font-size: 24px;
+  font-weight: bold;
+}
+QLabel#scoreStatusLabel {
+  color: #555555;
+}
+QLabel#scoreDetailLabel {
+  color: #666666;
+  font-size: 12px;
+}</string>
+          </property>
+          <layout class="QVBoxLayout" name="scorePanelLayout">
+           <property name="leftMargin">
+            <number>10</number>
+           </property>
+           <property name="topMargin">
+            <number>10</number>
+           </property>
+           <property name="rightMargin">
+            <number>10</number>
+           </property>
+           <property name="bottomMargin">
+            <number>10</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="scoreTitleLabel">
+             <property name="text">
+              <string>合理性评分</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="scoreValueLabel">
+             <property name="text">
+              <string>-- 分</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="scoreStatusLabel">
+             <property name="text">
+              <string>未计算</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="scoreDetailLabel">
+             <property name="text">
+              <string>点击分布合理性计算后显示。</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
          <spacer name="horizontalSpacer_2">
           <property name="orientation">
            <enum>Qt::Orientation::Horizontal</enum>
@@ -111,6 +217,13 @@
          <widget class="QLineEdit" name="searchEdit">
           <property name="placeholderText">
            <string>输入城市或区域名称，如：北京市海淀区</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="regionBtn">
+          <property name="text">
+           <string>获取行政区</string>
           </property>
          </widget>
         </item>
